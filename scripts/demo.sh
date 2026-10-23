@@ -6,8 +6,13 @@ cd "$root"
 
 replicas="${1:-2}"
 
+if [[ ! -f .env ]]; then
+  echo "Copy .env.example to .env and set WALLET_CONNECTION_STRING to your local SQL Server." >&2
+  exit 1
+fi
+
 docker compose up -d --build --scale "api=${replicas}" --wait
-docker compose --profile demo build producer
-# --no-deps keeps the scaled API replicas. A plain `run` recreates dependencies at the default count.
-docker compose --profile demo run --rm --no-deps producer
 docker compose ps
+echo
+echo "RabbitMQ is on localhost:5672. The API replicas are behind http://localhost:8080."
+echo "Run the Producer project from Visual Studio when you want to publish the charges."
