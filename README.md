@@ -7,7 +7,7 @@ The demo user starts with **$1100**. The producer publishes **two different char
 An in-memory lock cannot do this when ten replicas are running. Two replicas can read $1100 at the same time and both decide the charge fits. The decision is made inside one SQL Server transaction:
 
 1. Insert the event id into `InboxMessages`. The primary key is the idempotency key. A second delivery of the same id waits, then receives the outcome that was already stored.
-2. Lock that user's wallet row with `UPDLOCK, ROWLOCK, HOLDLOCK`. Every replica blocks on the same row.
+2. Lock that user's existing wallet row with `UPDLOCK, ROWLOCK`. Every replica blocks on that row until the transaction commits. A missing wallet is rejected and not inserted, so this read does not take `HOLDLOCK`. The reset `MERGE` still uses `HOLDLOCK`, because that statement inserts when the row is absent.
 3. Charge only when the locked balance is enough. The balance column also has `CHECK (Balance >= 0)`.
 4. Write the ledger row and the final inbox status in the same transaction.
 5. Acknowledge the RabbitMQ message only after that commit. A crash before the ack redelivers the message, and step 1 makes the redelivery a no-op.

@@ -93,9 +93,10 @@ public sealed class WalletDebitService(string connectionString, ILogger<WalletDe
                 DuplicateDelivery: false);
         }
 
-        // UPDLOCK + HOLDLOCK serializes every replica that touches this wallet row.
-        // The second debit blocks here until the first transaction commits, then
-        // reads the balance that transaction left behind.
+        // UPDLOCK is held until this transaction commits, so a second debit of the
+        // same wallet waits here and then reads the balance this transaction wrote.
+        // HOLDLOCK is omitted: a missing wallet is rejected and not inserted, and
+        // UserId is the primary key, so there is no gap to protect.
         var balance = await LockBalanceAsync(connection, transaction, request.UserId, cancellationToken);
         if (balance is null)
         {
@@ -197,7 +198,7 @@ public sealed class WalletDebitService(string connectionString, ILogger<WalletDe
     {
         const string sql = """
             SELECT Balance
-            FROM dbo.Wallets WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+            FROM dbo.Wallets WITH (UPDLOCK, ROWLOCK)
             WHERE UserId = @UserId
             """;
 
