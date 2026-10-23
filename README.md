@@ -1,6 +1,6 @@
 # DIA wallet
 
-`Api.DIA` is the wallet service. `Producer` is a console app that publishes wallet charges. SQL Server is the source of truth. RabbitMQ carries the commands. The API is stateless, so it can run as many replicas as you need (the demo starts two; the same image scales to ten).
+`Api.DIA` is the wallet service. `Producer` is the Visual Studio console app that publishes wallet charges when you press F5. Your local SQL Server is the source of truth. RabbitMQ, running from the official image in Docker Desktop, carries the commands. Two API replicas run in Docker Desktop, and the same image can scale further. The race is still decided in SQL Server, so the replicas cannot both spend the same money.
 
 The demo user starts with **$1100**. The producer publishes **two different charges of $1000**, then publishes the first charge again. One charge is applied, the other is rejected because $100 is left, and the replay does not move the balance. The ending balance is **$100**.
 
@@ -12,23 +12,34 @@ An in-memory lock cannot do this when ten replicas are running. Two replicas can
 4. Write the ledger row and the final inbox status in the same transaction.
 5. Acknowledge the RabbitMQ message only after that commit. A crash before the ack redelivers the message, and step 1 makes the redelivery a no-op.
 
-## Run the demo
+## Run it
 
-Docker is required.
+SQL Server stays on your machine. Docker Desktop runs RabbitMQ from the official `rabbitmq:4-management` image and two replicas of `Api.DIA`. The Producer is a console app: open it in Visual Studio and press F5 when you want the events published.
 
-```bash
-./scripts/demo.sh 2
+LocalDB cannot be reached from a container. Use SQL Server Express, Developer, or a full instance, and turn on TCP/IP.
+
+1. In SQL Server Configuration Manager, enable TCP/IP for the instance and set it to port **1433**. Restart the SQL Server service.
+2. Use Mixed Mode authentication. The API containers are Linux, so they cannot use Windows Authentication. A SQL login such as `sa` needs permission to create the `DiaWallet` database (`dbcreator` or `sysadmin`).
+3. Allow inbound TCP 1433 in Windows Firewall for SQL Server, so Docker Desktop can connect through `host.docker.internal`.
+4. Copy the sample environment file and put that SQL login in it:
+
+```powershell
+copy .env.example .env
 ```
 
-`2` is the number of API replicas. Use `10` to start ten consumers on the same queue. RabbitMQ delivers each message to one of them. SQL Server still allows only one of the two $1000 charges.
+5. Start Docker Desktop, then from the repo folder:
 
-When it finishes, the producer prints `PASS` and exits 0. The wallet HTTP API is at <http://localhost:8080>. RabbitMQ management is at <http://localhost:15672> (`guest` / `guest`).
-
-Stop everything with:
-
-```bash
-docker compose down
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\demo.ps1 -Replicas 2
 ```
+
+That starts one RabbitMQ container and two API containers. RabbitMQ management is at <http://localhost:15672> (`guest` / `guest`). Both API replicas are behind <http://localhost:8080>.
+
+6. Open `DIA.slnx` in Visual Studio, set **Producer** as the startup project, and press F5. Each run resets the demo wallet to $1100, publishes two different $1000 charges, then publishes the first event again. The window prints `PASS` when one charge is applied and the other is rejected.
+
+Stop the containers with `docker compose down`. Pass `-Replicas 10` to run ten API replicas. The Producer keeps talking to `localhost:5672` and `http://localhost:8080`, which are set in `src/Producer/appsettings.json`.
+
+On Linux or macOS the same stack is `./scripts/demo.sh 2`, then run the Producer with `dotnet run --project src/Producer`.
 
 ## Call the API from Postman
 
@@ -100,7 +111,7 @@ OpenAPI is served at <http://localhost:8080/openapi/v1.json>.
 | Project | Role |
 | --- | --- |
 | `src/Api.DIA` | ASP.NET Core wallet API and RabbitMQ consumer |
-| `src/Producer` | Publishes the two charges and checks the result |
+| `src/Producer` | Visual Studio console app. Press F5 to publish the two charges |
 | `src/Dia.Contracts` | Message contracts and queue names shared by both |
 | `tests/Api.DIA.Tests` | Parallel charges against a real SQL Server container |
 
@@ -137,4 +148,8 @@ dotnet test
 
 ## Local configuration
 
-SQL Server password in this sample: `Dia_Wallet_Str0ng!`. RabbitMQ user: `guest` / `guest`. Change both before any real deployment, and set `Demo__AllowReset=false` outside the demo.
+`compose.yaml` reads `WALLET_CONNECTION_STRING` from `.env`. That string is what the API containers use to reach SQL Server on the host. `.env` is not committed.
+
+RabbitMQ inside Docker Desktop is `guest` / `guest` on ports 5672 and 15672. The demo reset endpoint is on while the containers are running (`Demo__AllowReset=true`). Turn that off outside this demo.
+
+`dotnet test` starts its own SQL Server container for the race tests. It does not connect to your local instance.
