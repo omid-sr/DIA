@@ -14,7 +14,37 @@ An in-memory lock cannot do this when ten replicas are running. Two replicas can
 
 ## Run the demo
 
-Docker is required.
+Docker is required. Give Docker at least 4 GB of memory. SQL Server inside the compose file is capped at 1536 MB, and the API images are built on top of that.
+
+### Windows
+
+1. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) and start it. Wait until it says the engine is running. WSL 2 is the backend Docker Desktop uses on Windows.
+2. Install [Git for Windows](https://git-scm.com/download/win) if `git` is not already on the machine.
+3. Open PowerShell and clone the repository:
+
+```powershell
+git clone https://github.com/omid-sr/DIA.git
+cd DIA
+git switch cursor/wallet-race-rabbitmq-sql-8b1c
+```
+
+4. Start two API replicas and run the producer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\demo.ps1 -Replicas 2
+```
+
+Use `-Replicas 10` to start ten API replicas. The producer prints `PASS` when one $1000 charge is applied and the other is rejected. The wallet HTTP API is at <http://localhost:8080>. RabbitMQ management is at <http://localhost:15672> (`guest` / `guest`).
+
+If port 1433, 5672, 8080, or 15672 is already in use, stop the other program or change that host port in `compose.yaml`.
+
+Stop everything from the same folder:
+
+```powershell
+docker compose down
+```
+
+### Linux or macOS
 
 ```bash
 ./scripts/demo.sh 2
@@ -22,13 +52,7 @@ Docker is required.
 
 `2` is the number of API replicas. Use `10` to start ten consumers on the same queue. RabbitMQ delivers each message to one of them. SQL Server still allows only one of the two $1000 charges.
 
-When it finishes, the producer prints `PASS` and exits 0. The wallet HTTP API is at <http://localhost:8080>. RabbitMQ management is at <http://localhost:15672> (`guest` / `guest`).
-
-Stop everything with:
-
-```bash
-docker compose down
-```
+When it finishes, the producer prints `PASS` and exits 0. Stop everything with `docker compose down`.
 
 ## Call the API from Postman
 
