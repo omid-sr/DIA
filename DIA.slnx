@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Api.DIA/Api.DIA.csproj" />
+    <Project Path="src/Dia.Contracts/Dia.Contracts.csproj" />
+    <Project Path="src/Producer/Producer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Api.DIA.Tests/Api.DIA.Tests.csproj" />
+  </Folder>
+</Solution>

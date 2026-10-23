@@ -1,0 +1,49 @@
+@host = http://localhost:8080
+@userId = 11111111-1111-1111-1111-111111111111
+
+### Health
+GET {{host}}/health
+
+### Reset the demo wallet to $1100
+POST {{host}}/api/demo/wallets/{{userId}}/reset
+Content-Type: application/json
+
+{
+  "balance": 1100
+}
+
+### Read the wallet
+GET {{host}}/api/wallets/{{userId}}
+
+### Charge $1000. Send this twice, in parallel, with two different event ids.
+POST {{host}}/api/wallets/{{userId}}/debits
+Content-Type: application/json
+
+{
+  "eventId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+  "amount": 1000
+}
+
+### Second concurrent charge. Same user, different event id.
+POST {{host}}/api/wallets/{{userId}}/debits
+Content-Type: application/json
+
+{
+  "eventId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
+  "amount": 1000
+}
+
+### Replay the first event. The balance must not change.
+POST {{host}}/api/wallets/{{userId}}/debits
+Content-Type: application/json
+
+{
+  "eventId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+  "amount": 1000
+}
+
+### Outcomes
+GET {{host}}/api/wallets/{{userId}}/debits
+
+### Ledger (only the charge that was applied)
+GET {{host}}/api/wallets/{{userId}}/ledger

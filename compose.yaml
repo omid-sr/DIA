@@ -1,0 +1,92 @@
+name: dia
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Dia_Wallet_Str0ng!"
+      MSSQL_PID: Developer
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "(/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\")",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 25s
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Api.DIA/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Wallet: "Server=sqlserver,1433;Database=DiaWallet;User Id=sa;Password=Dia_Wallet_Str0ng!;TrustServerCertificate=True;Encrypt=True;Connect Timeout=30"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__User: guest
+      RabbitMq__Password: guest
+      RabbitMq__PrefetchCount: "1"
+      Demo__AllowReset: "true"
+      Demo__InitialBalance: "1100"
+      Demo__UserId: "11111111-1111-1111-1111-111111111111"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  producer:
+    build:
+      context: .
+      dockerfile: src/Producer/Dockerfile
+    environment:
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: "5672"
+      WalletApi__BaseUrl: http://gateway:8080
+      Demo__UserId: "11111111-1111-1111-1111-111111111111"
+      Demo__Amount: "1000"
+      Demo__OpeningBalance: "1100"
+    depends_on:
+      gateway:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    profiles:
+      - demo
